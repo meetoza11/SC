@@ -1,0 +1,42 @@
+Step1: Open Powershell as administator and run this below query; may need to change the parameter values as necessary
+If below errors out, to troubleshoot the issue create alias (Test1) manually by going Sql Server Configuration Manager and choose one of the SQL Native Client 11.0 Configuration (32bit) OR SQL Native Client 11.0 Configuration. This should create alias at Registry Editor location.
+Start->type regedit. Go to HKEY_LOCAL_MACHINE\SOFTWARE\Wow6432Node\Microsoft\MSSQLServer\Client\ConnectTo and see if that alias has create here. OR go to Registry Editor and right click on HKEY_LOCAL_MACHINE and find RCHPWVMGMSQL01.prod.corpint.net\MANAGEMENT01 (this will help you to find the alias created location); connect to SSMS and run query in SQL CMD Mode 
+:Test1
+select @@servername to make sure it works.
+
+Function Set-SqlAlias {
+    [Cmdletbinding()]
+
+    param (
+        [parameter(Mandatory=$true)] [string] $SqlInstanceName,
+        [parameter(Mandatory=$true)] [string] $Alias,
+        [parameter(Mandatory=$true)] [string] $Port,
+        [parameter(Mandatory=$false)] $OverWrite = 0
+    )
+
+    BEGIN{
+        $x64 = "HKLM:SOFTWARE\Wow6432Node\Microsoft\MSSQLServer\Client\ConnectTo"
+
+        if (!(Test-Path "$x64")) {
+            New-Item -Path "$x64" -Name "ConnectTo"
+        }
+    }
+
+    PROCESS{
+        if($OverWrite -ne 0){
+            Get-Item -path "$x64"|Remove-ItemProperty -Name "$Alias"|Out-Null
+        }
+
+        if (!(Get-Item -Path "$x64").GetValue("$Alias")) {
+            New-ItemProperty -Path "$x64" -Name "$Alias" -PropertyType String -Value $("DBMSSOCN,{0},{1}" -f "$SqlInstanceName", $Port)|Out-Null
+        }
+    }
+}
+
+$a = Invoke-Sqlcmd -ServerInstance "RCHPWVMGMSQL01.prod.corpint.net\MANAGEMENT01" -Database DBA -Query "select instance_name, Alias, Port from vw_CurrentInstances where alias <> ''"
+
+foreach ($b in $a) {
+Set-SqlAlias -SqlInstanceName $b.instance_name -Alias $b.Alias -Port $b.Port
+}
+
+    
